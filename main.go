@@ -4,14 +4,46 @@ import (
 	"fmt"
 	"log"
 	"net/http"
+	"time"
 )
 
-func checkAccess(device, tag string) bool {
-	return true
+func recordAccess(device, tag, user string, success bool) {
+	currentTime := time.Now()
+	sucMsg := ""
+	if success {
+		sucMsg = "was"
+	} else {
+		sucMsg = "was not"
+	}
+
+	usr := "someone"
+	if len(user) > 0 {
+		usr = user
+	}
+
+	log.Printf("%s used tag %s to access %s and %s successful", usr, tag, device, sucMsg)
+
+	topicMsg := fmt.Sprintf("%s,%s,%s,%s,%t", currentTime.Format("2006-01-02 15:04:05"), device, tag, user, success)
+	publish(topicMsg)
+}
+
+func checkAccess(device, operTag string) bool {
+	users, _ := GetUsersInGroup(device)
+	for _, user := range users {
+		tags := getRFIDTagsFor(user)
+		for _, tag := range tags {
+			if tag == operTag {
+				recordAccess(device, tag, user, true)
+				return true
+			}
+		}
+	}
+	recordAccess(device, operTag, "", false)
+	return false
 }
 
 // We should be getting a request from a device similar to:
-// 		http://localhost:8080/authcheck?device=leblond&tag=12345
+// 		"http://localhost:8080/authcheck?device=Tormach%20Authorized%20Users&tag=0011147936"
 func authCheckServer(w http.ResponseWriter, r *http.Request) {
 	// Make sure we have both parts of the request, otherwise do
 	// nothing. This is *not* the same as returning a value to
@@ -48,6 +80,15 @@ func authCheckServer(w http.ResponseWriter, r *http.Request) {
 }
 
 func main() {
+	log.Println("And awaaaay we go!")
+
+	// Start our LDAP connection...
+	connectToADServer()
+	// And our MQTT connection
+	connectToMQTT()
+
+	// Now we start listening
 	http.HandleFunc("/authcheck", authCheckServer)
 	http.ListenAndServe(":8080", nil)
+
 }

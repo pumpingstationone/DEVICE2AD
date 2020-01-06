@@ -3,8 +3,8 @@ package main
 import (
 	"fmt"
 	"log"
-	"net/http"
 	"time"
+	"net/http"
 )
 
 func recordAccess(device, tag, user string, success bool) {
@@ -28,6 +28,9 @@ func recordAccess(device, tag, user string, success bool) {
 }
 
 func checkAccess(device, operTag string) bool {
+	connectToADServer()
+	defer l.Close()
+
 	users, _ := GetUsersInGroup(device)
 	for _, user := range users {
 		tags := getRFIDTagsFor(user)
@@ -43,7 +46,7 @@ func checkAccess(device, operTag string) bool {
 }
 
 // We should be getting a request from a device similar to:
-// 		"http://localhost:8080/authcheck?device=Tormach%20Authorized%20Users&tag=0011147936"
+// 		http://localhost:8080/authcheck?device=leblond&tag=12345
 func authCheckServer(w http.ResponseWriter, r *http.Request) {
 	// Make sure we have both parts of the request, otherwise do
 	// nothing. This is *not* the same as returning a value to
@@ -82,11 +85,9 @@ func authCheckServer(w http.ResponseWriter, r *http.Request) {
 func main() {
 	log.Println("And awaaaay we go!")
 
-	// Start our LDAP connection...
-	connectToADServer()
-	// And our MQTT connection
+	// Start our MQTT connection
 	connectToMQTT()
-
+	
 	// Now we start listening
 	http.HandleFunc("/authcheck", authCheckServer)
 	http.ListenAndServe(":8080", nil)

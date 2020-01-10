@@ -15,7 +15,7 @@ const (
 	ldapServerPort = 389
 	ldapUser       = "" // in "PS1\\<user>" format
 	ldapPassword   = ""
-	baseDN         = "DC=pumpingstationone,DC=org"
+	baseDN         = ""
 )
 
 func connectToADServer() {
@@ -43,7 +43,7 @@ func getRFIDTagsFor(username string) []string {
 		baseDN, // The base dn to search
 		ldap.ScopeWholeSubtree, ldap.NeverDerefAliases, 0, 0, false,
 		fmt.Sprintf("(&(objectClass=Person)(distinguishedName=%s))", username),
-		[]string{"otherPager"},
+		[]string{"otherPager", "userAccountControl"},
 		nil,
 	)
 
@@ -53,7 +53,18 @@ func getRFIDTagsFor(username string) []string {
 	}
 
 	var pagers []string
+
 	for _, entry := range sr.Entries {
+		// Here's how we shut out inactive members: If the userAccountControl value is
+		// not 512 (active), then we simply return, so the tags are not added to the
+		// array and thus we're not going to let this person use the tool (assuming
+		// that person had the tag we're querying)
+		var userActive = entry.GetAttributeValue("userAccountControl")
+		if userActive != "512" {
+			log.Println("Ignoring", username, "because the member is not active")
+			return pagers
+		}
+
 		pagers = make([]string, len(entry.GetAttributeValues("otherPager")))
 		copy(pagers, entry.GetAttributeValues("otherPager"))
 	}
@@ -83,3 +94,18 @@ func GetUsersInGroup(group string) ([]string, error) {
 	return groups, nil
 }
 
+/*
+func main() {
+	connectToADServer()
+
+	users, _ := GetUsersInGroup("Tormach Authorized Users")
+	for _, user := range users {
+		tags := getRFIDTagsFor(user)
+		for _, tag := range tags {
+			fmt.Println(user, " has tag ", tag)
+		}
+	}
+
+	l.Close()
+}
+*/
